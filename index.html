@@ -195,6 +195,7 @@
         <div class="header-gardes">
           <h2 class="section-title">Mes gardes</h2>
           <div class="backup-actions">
+            <button id="btn-sync-sheet" class="btn-backup" style="background:#e3f2fd; color:#1976d2;">Sync Sheet</button>
             <button id="btn-export" class="btn-backup">Exporter</button>
             <button id="btn-import-trigger" class="btn-backup">Importer</button>
             <input type="file" id="file-import" accept=".json" class="hidden">
@@ -275,7 +276,7 @@
       <div class="header-animaux">
         <div>
           <h1>Mes animaux</h1>
-          <p id="animaux-counter">4 animaux enregistrés</p>
+          <p id="animaux-counter">0 animaux enregistrés</p>
         </div>
         <button id="btn-add-animal-header" class="fab" style="position: static; width: 36px; height: 36px; font-size: 18px;">+</button>
       </div>
@@ -320,13 +321,7 @@
 
       <div class="card-box">
         <h3>Notes & Besoins</h3>
-        <p id="detail-notes" style="margin-top: 4px;">repas : 3 tasse a café de croquettes, eau concombre</p>
-      </div>
-
-      <div class="card-box">
-        <h3>Statistiques</h3>
-        <p style="margin-top: 4px;">3 gardes, 8 jours</p>
-        <p style="margin-top: 4px;">Gain total : 75,00 €</p>
+        <p id="detail-notes" style="margin-top: 4px;">Aucune consigne saisie.</p>
       </div>
     </div>
 
@@ -453,18 +448,8 @@
   <script>
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzPlLtKYuGxfsRpDrW4Q7OBSY0Q8BMwHHT2Ek6yeW8a5ptmQRqJoz_JA3V6E-fkZDpg/exec";
 
-    let initialAnimaux = [
-      { id: 1, name: "Marlou", owner: "Nicolas", phone: "06 00 00 00 01", breed: "Chartreux • 3 ans", type: "chat", notes: "Sortir la litière deux fois par jour.", img: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=100" },
-      { id: 2, name: "Nounousse", owner: "Nicolas", phone: "06 00 00 00 01", breed: "Chartreux • 3 ans", type: "chat", notes: "repas : 3 tasse a café de croquettes, eau concombre", img: "https://images.unsplash.com/photo-1573865526739-10659fec78a5?w=100" },
-      { id: 3, name: "KitKat", owner: "Cass", phone: "06 12 34 56 78", breed: "Européen • 2 ans", type: "chat", notes: "Donner un sachet de pâtée à midi.", img: "https://images.unsplash.com/photo-1543852786-1cf6624b9987?w=100" }
-    ];
-
-    let defaultGardes = [
-      { id: 101, animalId: 3, animalName: "KitKat", ownerName: "Cass", type: "Visite", startISO: "2026-08-27T13:00:00", endISO: "2026-09-08T18:00:00", color: "#ab47bc", montant: "50", paiement: "Virement", img: "https://images.unsplash.com/photo-1543852786-1cf6624b9987?w=100" }
-    ];
-
-    let animauxData = JSON.parse(localStorage.getItem('mesAnimaux')) || initialAnimaux;
-    let gardesListData = JSON.parse(localStorage.getItem('mesGardesList')) || defaultGardes;
+    let animauxData = JSON.parse(localStorage.getItem('mesAnimaux')) || [];
+    let gardesListData = JSON.parse(localStorage.getItem('mesGardesList')) || [];
     
     let editingAnimalId = null;
     let editingGardeId = null;
@@ -517,6 +502,29 @@
         if (activeNav) activeNav.classList.add('active');
         if (showVue === vueCal) calendar.render();
       }
+
+      function fetchFromGoogleSheet() {
+        fetch(GOOGLE_SCRIPT_URL)
+          .then(res => res.json())
+          .then(data => {
+            if (data.animaux && data.animaux.length > 0) {
+              animauxData = data.animaux;
+              localStorage.setItem('mesAnimaux', JSON.stringify(animauxData));
+            }
+            if (data.gardes && data.gardes.length > 0) {
+              gardesListData = data.gardes;
+              localStorage.setItem('mesGardesList', JSON.stringify(gardesListData));
+            }
+            calendar.removeAllEvents();
+            calendar.addEventSource(getCalendarEvents());
+            renderAnimaux();
+            renderGardesList();
+            alert("Données Google Sheet synchronisées !");
+          })
+          .catch(err => alert("Erreur lors de la synchronisation Sheet : " + err));
+      }
+
+      document.getElementById('btn-sync-sheet').addEventListener('click', fetchFromGoogleSheet);
 
       function getGardeStatus(startISO, endISO) {
         const now = new Date();
@@ -675,7 +683,6 @@
       }
       renderGardesList();
 
-      // --- LOGIQUE SAUVEGARDE EXPORT / IMPORT ---
       document.getElementById('btn-export').addEventListener('click', () => {
         const dataToExport = {
           animaux: animauxData,
@@ -1005,7 +1012,6 @@
         localStorage.setItem('mesGardesList', JSON.stringify(gardesListData));
         renderGardesList();
 
-        // Envoi automatique de la garde vers Google Sheets
         if (targetGarde) {
           syncToGoogleSheet(targetGarde);
         }
