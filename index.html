@@ -451,6 +451,8 @@
   </div>
 
   <script>
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzPlLtKYuGxfsRpDrW4Q7OBSY0Q8BMwHHT2Ek6yeW8a5ptmQRqJoz_JA3V6E-fkZDpg/exec";
+
     let initialAnimaux = [
       { id: 1, name: "Marlou", owner: "Nicolas", phone: "06 00 00 00 01", breed: "Chartreux • 3 ans", type: "chat", notes: "Sortir la litière deux fois par jour.", img: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=100" },
       { id: 2, name: "Nounousse", owner: "Nicolas", phone: "06 00 00 00 01", breed: "Chartreux • 3 ans", type: "chat", notes: "repas : 3 tasse a café de croquettes, eau concombre", img: "https://images.unsplash.com/photo-1573865526739-10659fec78a5?w=100" },
@@ -560,6 +562,46 @@
         endStr = endStr.charAt(0).toUpperCase() + endStr.slice(1);
 
         return `Du ${startStr}<br>au ${endStr}`;
+      }
+
+      function formatDateFR(dateStr) {
+        if (!dateStr) return "";
+        const parts = dateStr.split('-');
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+
+      function calculateDurationDays(dDeb, dFin) {
+        const start = new Date(dDeb);
+        const end = new Date(dFin);
+        const diffTime = Math.abs(end - start);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+        return diffDays || 1;
+      }
+
+      function syncToGoogleSheet(gardeObj) {
+        const dDebFr = formatDateFR(gardeObj.startISO.split('T')[0]);
+        const dFinFr = formatDateFR(gardeObj.endISO.split('T')[0]);
+        const duration = calculateDurationDays(gardeObj.startISO.split('T')[0], gardeObj.endISO.split('T')[0]);
+        const total = parseFloat(gardeObj.montant) || 0;
+        const dailyPrice = (total > 0 && duration > 0) ? (total / duration).toFixed(2) : "";
+
+        fetch(GOOGLE_SCRIPT_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            animalName: gardeObj.animalName,
+            startDate: dDebFr,
+            endDate: dFinFr,
+            duration: duration,
+            type: gardeObj.type,
+            dailyPrice: dailyPrice,
+            totalPrice: total ? `${total} €` : "",
+            payment: gardeObj.paiement
+          })
+        })
+        .then(() => console.log("Données envoyées vers Google Sheets avec succès !"))
+        .catch(err => console.error("Erreur d'envoi vers Google Sheets :", err));
       }
 
       function openGardeDetail(gardeId) {
@@ -909,6 +951,7 @@
 
         const startISO = `${dDeb}T${hDeb}:00`;
         const endISO = `${dFin}T${hFin}:00`;
+        let targetGarde = null;
 
         if (editingGardeId) {
           const g = gardesListData.find(item => item.id === editingGardeId);
@@ -922,6 +965,8 @@
           g.montant = document.getElementById('montant').value;
           g.paiement = document.getElementById('paiement').value;
           g.img = selectedAnimal.img;
+
+          targetGarde = g;
 
           const calEvent = calendar.getEventById(editingGardeId.toString());
           if (calEvent) {
@@ -954,10 +999,17 @@
             img: selectedAnimal.img
           };
           gardesListData.push(newGardeCard);
+          targetGarde = newGardeCard;
         }
 
         localStorage.setItem('mesGardesList', JSON.stringify(gardesListData));
         renderGardesList();
+
+        // Envoi automatique de la garde vers Google Sheets
+        if (targetGarde) {
+          syncToGoogleSheet(targetGarde);
+        }
+
         switchTab(navCal, vueCal);
       });
     });
