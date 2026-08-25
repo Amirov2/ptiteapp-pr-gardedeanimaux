@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestion de Gardes</title>
+  <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+  <style>
+    :root {
+      --bg-color: #f5f5f7;
+      --card-bg: #ffffff;
+      --text-main: #1d1d1f;
+      --text-muted: #86868b;
+      --primary-green: #689f66;
+      --tag-garde: #e57373;
+      --tag-visite: #ab47bc;
+      --tag-promenade: #fb8c00;
+      --border-color: #e0e0e0;
+      --danger-red: #e53935;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, sans-serif; }
+
+    body { background-color: #e0e0e0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+
+    .app-container {
+      width: 100%; max-width: 414px; height: 896px;
+      background-color: var(--bg-color); display: flex; flex-direction: column;
+      position: relative; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.15); border-radius: 24px;
+    }
+
+    .content { flex: 1; overflow-y: auto; padding: 16px; padding-bottom: 110px; }
+    .hidden { display: none !important; }
+
+    /* --- CALENDRIER --- */
+    #calendar-container { background: white; padding: 12px; border-radius: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); margin-top: 10px; }
+    .fc .fc-toolbar-title { font-size: 1.1em; font-weight: bold; }
+    .fc-theme-standard td, .fc-theme-standard th { border-color: #f0f0f0; }
+    .fc-daygrid-event { font-size: 10px; border: none; padding: 2px 4px; color: white; border-radius: 4px; cursor: pointer; }
+    
+    .fab {
+      position: absolute; bottom: 80px; right: 20px; width: 50px; height: 50px;
+      border-radius: 50%; background-color: var(--primary-green); color: white; border: none;
+      font-size: 26px; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2); cursor: pointer; z-index: 30;
+    }
+
+    /* --- SECTION MES GARDES & BACKUP --- */
+    .section-gardes { margin-top: 20px; }
+    .header-gardes { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .section-title { font-size: 20px; font-weight: 700; }
+
+    .backup-actions { display: flex; gap: 6px; }
+    .btn-backup { background: #e8f5e9; color: var(--primary-green); border: none; border-radius: 8px; padding: 6px 10px; font-size: 11px; font-weight: 600; cursor: pointer; }
+
+    .filters-bar { display: flex; gap: 12px; margin-bottom: 16px; border-bottom: 1px solid #e0e0e0; padding-bottom: 8px; overflow-x: auto; }
+    .filter-btn { font-size: 13px; color: var(--text-muted); cursor: pointer; background: none; border: none; padding-bottom: 4px; white-space: nowrap; }
+    .filter-btn.active { color: var(--text-main); font-weight: 600; border-bottom: 2px solid var(--primary-green); }
+
+    .gardes-list { display: flex; flex-direction: column; gap: 10px; }
+    .garde-card {
+      background: white; border-radius: 16px; padding: 12px 14px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.02); cursor: pointer;
+    }
+    .card-left { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+    .card-avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+    .card-info { min-width: 0; }
+    .card-info h3 { font-size: 15px; font-weight: 700; }
+    .card-info h3 span { font-weight: 400; font-size: 12px; color: var(--text-muted); }
+    
+    .badge-type { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 11px; margin-top: 4px; font-weight: 600; }
+    .badge-Garde { background-color: #fce4ec; color: #d32f2f; }
+    .badge-Visite { background-color: #f3e5f5; color: #7b1fa2; }
+    .badge-Promenade { background-color: #fff3e0; color: #e65100; }
+
+    .card-date { font-size: 11px; color: var(--text-muted); margin-top: 4px; line-height: 1.3; }
+    .card-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: 8px; }
+
+    .status-tag { padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .status-en-cours { background-color: #c8e6c9; color: #2e7d32; }
+    .status-a-venir { background-color: #e3f2fd; color: #1976d2; }
+    .status-termine { background-color: #f5f5f5; color: #9e9e9e; }
+    .chevron { color: var(--text-muted); font-size: 14px; }
+
+    /* --- ANIMAUX GRILLE --- */
+    .header-animaux { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+    .header-animaux h1 { font-size: 22px; font-weight: 700; }
+    .header-animaux p { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    
+    .search-bar {
+      margin-top: 15px; margin-bottom: 15px; background: white; border-radius: 10px;
+      display: flex; align-items: center; padding: 8px 12px; border: 1px solid #eaeaea;
+    }
+    .search-bar input { border: none; outline: none; width: 100%; font-size: 13px; margin-left: 8px; }
+
+    .grid-animaux { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .animal-item {
+      background: white; border-radius: 16px; padding: 12px; position: relative;
+      display: flex; flex-direction: column; align-items: flex-start; cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+    }
+    .animal-avatar { width: 54px; height: 54px; border-radius: 50%; object-fit: cover; margin-bottom: 8px; }
+    .animal-name { font-size: 15px; font-weight: 700; color: var(--text-main); }
+    .animal-owner { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+    .animal-breed { font-size: 10px; color: var(--text-muted); opacity: 0.8; }
+
+    /* --- FICHES DETAIL --- */
+    .header-detail { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; margin-bottom: 20px; }
+    .header-detail-left { display: flex; align-items: center; gap: 12px; }
+    .header-detail .back-btn { font-size: 22px; font-weight: bold; cursor: pointer; }
+    .header-detail-title h1 { font-size: 20px; font-weight: 700; }
+    .header-detail-title p { font-size: 12px; color: var(--text-muted); }
+    .btn-edit { background: none; border: none; color: var(--primary-green); font-weight: 600; font-size: 14px; cursor: pointer; }
+
+    .profile-card {
+      background: white; border-radius: 18px; padding: 16px; text-align: center;
+      position: relative; margin-bottom: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+    }
+    .profile-avatar { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-top: -30px; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    .profile-card h2 { font-size: 18px; margin-top: 6px; }
+    .profile-card p { font-size: 12px; color: var(--text-muted); }
+
+    .card-box {
+      background: white; border-radius: 16px; padding: 14px 16px; margin-bottom: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+    }
+    .card-box h3 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+    .card-box p { font-size: 13px; color: var(--text-main); line-height: 1.4; }
+
+    .owner-box { display: flex; justify-content: space-between; align-items: center; }
+    .action-btns { display: flex; gap: 8px; }
+    .action-btn {
+      width: 36px; height: 36px; border-radius: 50%; background: #e8f5e9;
+      display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 14px;
+    }
+
+    /* --- FORMULAIRES --- */
+    .header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; margin-top: 10px; }
+    .back-btn { font-size: 20px; color: var(--text-main); cursor: pointer; font-weight: bold; }
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; margin-top: 15px; }
+    h2 { font-size: 16px; font-weight: 600; }
+    
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%; border: 1px solid var(--border-color); border-radius: 10px;
+      padding: 10px; font-size: 13px; background: white; color: var(--text-main);
+    }
+    .form-group textarea { height: 70px; resize: none; }
+
+    .type-grid { display: flex; gap: 10px; margin-top: 10px; }
+    .type-btn {
+      flex: 1; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px;
+      padding: 10px 5px; text-align: center; font-size: 11px; color: var(--text-muted); cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+    }
+    .type-btn svg { width: 20px; height: 20px; fill: currentColor; }
+    .type-btn[data-type="Garde"].active { background: #fce4ec; border-color: var(--tag-garde); color: #d32f2f; }
+    .type-btn[data-type="Visite"].active { background: #f3e5f5; border-color: var(--tag-visite); color: var(--tag-visite); }
+    .type-btn[data-type="Promenade"].active { background: #fff3e0; border-color: var(--tag-promenade); color: var(--tag-promenade); }
+
+    .dates-container { background: var(--card-bg); border-radius: 12px; padding: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px; }
+    .date-input { width: 100%; background: #f0f4f8; border: none; border-radius: 8px; padding: 8px; font-size: 12px; margin-top: 4px; margin-bottom: 8px; }
+
+    .tarif-row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+    .tarif-row input, .tarif-row select { width: 120px; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; font-size: 12px; }
+    
+    .btn-valider { width: 100%; background: var(--primary-green); color: white; border: none; border-radius: 12px; padding: 14px; font-size: 14px; font-weight: 600; margin-top: 20px; cursor: pointer; }
+    .btn-danger { width: 100%; background: var(--danger-red); color: white; border: none; border-radius: 12px; padding: 14px; font-size: 14px; font-weight: 600; margin-top: 20px; cursor: pointer; }
+
+    /* --- NAVIGATION ANCRÉE EN BAS --- */
+    .bottom-nav {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 65px; background-color: var(--card-bg);
+      display: flex; justify-content: space-around; align-items: center; border-top: 1px solid #f0f0f0; z-index: 30;
+    }
+    .nav-item { 
+      display: flex; flex-direction: column; align-items: center; font-size: 10px; 
+      color: var(--text-muted); text-decoration: none; padding: 6px 16px; cursor: pointer; user-select: none;
+    }
+    .nav-item * { pointer-events: none; }
+    .nav-item.active { background-color: #e8f5e9; color: var(--primary-green); font-weight: 600; border-radius: 10px; }
+    .nav-item svg { width: 20px; height: 20px; margin-bottom: 2px; fill: currentColor; }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    
+    <!-- VUE 1 : CALENDRIER & MES GARDES -->
+    <div id="vue-calendrier" class="content">
+      <div id="calendar-container"></div>
+      
+      <div class="section-gardes">
+        <div class="header-gardes">
+          <h2 class="section-title">Mes gardes</h2>
+          <div class="backup-actions">
+            <button id="btn-export" class="btn-backup">Exporter</button>
+            <button id="btn-import-trigger" class="btn-backup">Importer</button>
+            <input type="file" id="file-import" accept=".json" class="hidden">
+          </div>
+        </div>
+
+        <div class="filters-bar">
+          <button class="filter-btn active" data-filter="Toutes">Toutes</button>
+          <button class="filter-btn" data-filter="Garde">Gardes</button>
+          <button class="filter-btn" data-filter="Visite">Visites</button>
+          <button class="filter-btn" data-filter="Promenade">Promenades</button>
+          <button class="filter-btn" data-filter="Terminées">Terminées</button>
+        </div>
+        <div class="gardes-list" id="gardes-list-container"></div>
+      </div>
+
+      <button class="fab btn-trigger-add">+</button>
+    </div>
+
+    <!-- VUE 2 : DETAIL DE LA GARDE -->
+    <div id="vue-detail-garde" class="content hidden">
+      <div class="header-detail">
+        <div class="header-detail-left">
+          <span class="back-btn" id="btn-back-detail-garde">&lt;</span>
+          <div class="header-detail-title">
+            <h1>Détail de la garde</h1>
+          </div>
+        </div>
+        <button class="btn-edit" id="btn-edit-garde">Éditer ✎</button>
+      </div>
+
+      <div class="card-box" style="display: flex; align-items: center; gap: 12px;">
+        <img id="detail-garde-animal-img" src="" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">
+        <div>
+          <h3 id="detail-garde-animal-name" style="font-size: 16px;">Marlou</h3>
+          <p id="detail-garde-animal-owner" style="font-size: 12px; color: var(--text-muted);">de Nicolas</p>
+        </div>
+      </div>
+
+      <div class="card-box owner-box">
+        <div>
+          <h3 id="detail-garde-owner-fullname">Nicolas</h3>
+          <p id="detail-garde-owner-phone" style="font-size: 11px; color: var(--text-muted);">Propriétaire</p>
+        </div>
+        <div class="action-btns">
+          <a href="#" id="detail-garde-btn-call" class="action-btn">📞</a>
+          <a href="#" id="detail-garde-btn-sms" class="action-btn">💬</a>
+        </div>
+      </div>
+
+      <div class="card-box">
+        <h3>Type de prestation</h3>
+        <div style="margin-top: 6px;">
+          <span id="detail-garde-type-badge" class="badge-type"></span>
+        </div>
+      </div>
+
+      <div class="card-box">
+        <h3>Dates</h3>
+        <p id="detail-garde-dates" style="margin-top: 4px;"></p>
+      </div>
+
+      <div class="card-box">
+        <h3>Notes & Besoins</h3>
+        <p id="detail-garde-notes" style="margin-top: 4px;">Aucune consigne saisie.</p>
+      </div>
+
+      <div class="card-box">
+        <h3>Tarif & Règlement</h3>
+        <p id="detail-garde-tarif" style="margin-top: 4px;"></p>
+      </div>
+
+      <button id="btn-cancel-garde" class="btn-danger">Annuler la garde</button>
+    </div>
+
+    <!-- VUE 3 : ANIMAUX GRILLE -->
+    <div id="vue-animaux" class="content hidden">
+      <div class="header-animaux">
+        <div>
+          <h1>Mes animaux</h1>
+          <p id="animaux-counter">4 animaux enregistrés</p>
+        </div>
+        <button id="btn-add-animal-header" class="fab" style="position: static; width: 36px; height: 36px; font-size: 18px;">+</button>
+      </div>
+
+      <div class="search-bar">
+        <span style="color:#86868b; font-size: 12px;">🔍</span>
+        <input type="text" id="search-input" placeholder="Rechercher">
+      </div>
+
+      <div class="grid-animaux" id="animaux-grid"></div>
+    </div>
+
+    <!-- VUE 4 : FICHE DETAIL ANIMAL -->
+    <div id="vue-detail-animal" class="content hidden">
+      <div class="header-detail">
+        <div class="header-detail-left">
+          <span class="back-btn" id="btn-back-animaux">&lt;</span>
+          <div class="header-detail-title">
+            <h1 id="detail-header-name">Nounousse</h1>
+            <p id="detail-header-owner">de Samuel</p>
+          </div>
+        </div>
+        <button class="btn-edit" id="btn-edit-animal">Éditer ✎</button>
+      </div>
+
+      <div class="profile-card">
+        <img id="detail-img" src="" class="profile-avatar">
+        <h2 id="detail-name">Nounousse</h2>
+        <p id="detail-breed">Maine Coon • 3 ans</p>
+      </div>
+
+      <div class="card-box owner-box">
+        <div>
+          <h3 id="detail-owner-name">Samuel Brouvier</h3>
+          <p id="detail-owner-phone" style="font-size: 11px; color: var(--text-muted);">Propriétaire</p>
+        </div>
+        <div class="action-btns">
+          <a href="#" id="detail-animal-btn-call" class="action-btn">📞</a>
+          <a href="#" id="detail-animal-btn-sms" class="action-btn">💬</a>
+        </div>
+      </div>
+
+      <div class="card-box">
+        <h3>Notes & Besoins</h3>
+        <p id="detail-notes" style="margin-top: 4px;">repas : 3 tasse a café de croquettes, eau concombre</p>
+      </div>
+
+      <div class="card-box">
+        <h3>Statistiques</h3>
+        <p style="margin-top: 4px;">3 gardes, 8 jours</p>
+        <p style="margin-top: 4px;">Gain total : 75,00 €</p>
+      </div>
+    </div>
+
+    <!-- VUE 5 : FORMULAIRE CREATION / EDITION ANIMAL -->
+    <div id="vue-form-animal" class="content hidden">
+      <div class="header">
+        <a id="btn-back-form-animal" class="back-btn">&lt;</a>
+        <h1 id="form-animal-title" style="font-size: 18px;">Ajouter un animal</h1>
+      </div>
+
+      <div class="form-group">
+        <label>Nom de l'animal</label>
+        <input type="text" id="animal-input-name" placeholder="Ex: Nounousse">
+      </div>
+
+      <div class="form-group">
+        <label>URL de la photo</label>
+        <input type="url" id="animal-input-img" placeholder="Ex: https://domaine.com/photo.jpg">
+      </div>
+
+      <div class="form-group">
+        <label>Espèce</label>
+        <select id="animal-input-type">
+          <option value="chat">Chat</option>
+          <option value="chien">Chien</option>
+          <option value="autre">Autre</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Race & Âge</label>
+        <input type="text" id="animal-input-breed" placeholder="Ex: Maine Coon • 3 ans">
+      </div>
+
+      <div class="form-group">
+        <label>Nom du propriétaire</label>
+        <input type="text" id="animal-input-owner" placeholder="Ex: Samuel Brouvier">
+      </div>
+
+      <div class="form-group">
+        <label>Téléphone du propriétaire</label>
+        <input type="tel" id="animal-input-phone" placeholder="Ex: 06 12 34 56 78">
+      </div>
+
+      <div class="form-group">
+        <label>Notes & Consignes particulières</label>
+        <textarea id="animal-input-notes" placeholder="Nourriture, traitement, comportement..."></textarea>
+      </div>
+
+      <button id="btn-save-animal" class="btn-valider">Enregistrer l'animal</button>
+    </div>
+
+    <!-- VUE 6 : FORMULAIRE CREATION / EDITION GARDE -->
+    <div id="vue-formulaire" class="content hidden">
+      <div class="header">
+        <a id="btn-back" class="back-btn">&lt;</a>
+        <h1 id="form-garde-title" style="font-size: 18px;">Nouvelle garde</h1>
+      </div>
+
+      <div class="section-header"><h2>Animal</h2></div>
+      <div class="form-group" style="margin-top: 8px;">
+        <select id="select-garde-animal"></select>
+      </div>
+
+      <div class="section-header"><h2>Type de garde</h2></div>
+      <div class="type-grid">
+        <div class="type-btn active" data-type="Garde" data-color="#e57373">
+          <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>Garde
+        </div>
+        <div class="type-btn" data-type="Visite" data-color="#ab47bc">
+          <svg viewBox="0 0 24 24"><path d="M12 2C9.24 2 7 4.24 7 7c0 2.76 2.24 5 5 5s5-2.24 5-5c0-2.76-2.24-5-5-5zm0 8c-1.65 0-3-1.35-3-3s1.35-3 3-3 3 1.35 3 3-1.35 3-3 3zm-7 3c-2.76 0-5 2.24-5 5v2h24v-2c0-2.76-2.24-5-5-5H5z"/></svg>Visite
+        </div>
+        <div class="type-btn" data-type="Promenade" data-color="#fb8c00">
+          <svg viewBox="0 0 24 24"><path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7"/></svg>Promenade
+        </div>
+      </div>
+
+      <div class="section-header"><h2>Dates</h2></div>
+      <div class="dates-container">
+        <div>
+          <label style="font-size: 11px; color: #86868b;">Début</label>
+          <input type="date" id="date-debut" class="date-input">
+          <input type="time" id="heure-debut" class="date-input" value="09:00">
+        </div>
+        <div>
+          <label style="font-size: 11px; color: #86868b;">Fin</label>
+          <input type="date" id="date-fin" class="date-input">
+          <input type="time" id="heure-fin" class="date-input" value="18:00">
+        </div>
+      </div>
+
+      <div class="section-header"><h2>Tarif</h2></div>
+      <div class="tarif-row"><label style="font-size: 13px;">Montant (€)</label><input type="number" id="montant"></div>
+      <div class="tarif-row">
+        <label style="font-size: 13px;">Paiement</label>
+        <select id="paiement">
+          <option value="Espèce">Espèce</option>
+          <option value="Animaute">Animaute</option>
+          <option value="Rover">Rover</option>
+          <option value="Virement">Virement</option>
+        </select>
+      </div>
+
+      <button id="btn-valider" class="btn-valider">Valider la garde</button>
+    </div>
+
+    <!-- NAVIGATION ANCRÉE EN BAS -->
+    <nav class="bottom-nav">
+      <div class="nav-item active" id="nav-cal">
+        <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10z"/></svg>
+        <span>Calendrier</span>
+      </div>
+      <div class="nav-item" id="nav-animaux">
+        <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
+        <span>Animaux</span>
+      </div>
+      <div class="nav-item" id="nav-compta">
+        <svg viewBox="0 0 24 24"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>
+        <span>Compta</span>
+      </div>
+    </nav>
+  </div>
+
+  <script>
+    let initialAnimaux = [
+      { id: 1, name: "Marlou", owner: "Nicolas", phone: "06 00 00 00 01", breed: "Chartreux • 3 ans", type: "chat", notes: "Sortir la litière deux fois par jour.", img: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=100" },
+      { id: 2, name: "Nounousse", owner: "Nicolas", phone: "06 00 00 00 01", breed: "Chartreux • 3 ans", type: "chat", notes: "repas : 3 tasse a café de croquettes, eau concombre", img: "https://images.unsplash.com/photo-1573865526739-10659fec78a5?w=100" },
+      { id: 3, name: "KitKat", owner: "Cass", phone: "06 12 34 56 78", breed: "Européen • 2 ans", type: "chat", notes: "Donner un sachet de pâtée à midi.", img: "https://images.unsplash.com/photo-1543852786-1cf6624b9987?w=100" }
+    ];
+
+    let defaultGardes = [
+      { id: 101, animalId: 3, animalName: "KitKat", ownerName: "Cass", type: "Visite", startISO: "2026-08-27T13:00:00", endISO: "2026-09-08T18:00:00", color: "#ab47bc", montant: "50", paiement: "Virement", img: "https://images.unsplash.com/photo-1543852786-1cf6624b9987?w=100" }
+    ];
+
+    let animauxData = JSON.parse(localStorage.getItem('mesAnimaux')) || initialAnimaux;
+    let gardesListData = JSON.parse(localStorage.getItem('mesGardesList')) || defaultGardes;
+    
+    let editingAnimalId = null;
+    let editingGardeId = null;
+    let selectedGardeId = null;
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const todayStr = new Date().toISOString().split('T')[0];
+      document.getElementById('date-debut').value = todayStr;
+      document.getElementById('date-fin').value = todayStr;
+
+      function getCalendarEvents() {
+        return gardesListData.map(g => ({
+          id: g.id.toString(),
+          title: `${g.type} : ${g.animalName}`,
+          start: g.startISO,
+          end: g.endISO,
+          color: g.color
+        }));
+      }
+
+      const calendarEl = document.getElementById('calendar-container');
+      const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth', 
+        locale: 'fr', 
+        displayEventTime: false,
+        events: getCalendarEvents(),
+        headerToolbar: { left: 'title', right: 'prev,next' }, 
+        height: 480,
+        eventClick: function(info) {
+          openGardeDetail(Number(info.event.id));
+        }
+      });
+      calendar.render();
+
+      const vueCal = document.getElementById('vue-calendrier');
+      const vueDetailGarde = document.getElementById('vue-detail-garde');
+      const vueAnimaux = document.getElementById('vue-animaux');
+      const vueDetail = document.getElementById('vue-detail-animal');
+      const vueFormAnimal = document.getElementById('vue-form-animal');
+      const vueForm = document.getElementById('vue-formulaire');
+      
+      const navCal = document.getElementById('nav-cal');
+      const navAnimaux = document.getElementById('nav-animaux');
+
+      function switchTab(activeNav, showVue) {
+        [vueCal, vueDetailGarde, vueAnimaux, vueDetail, vueFormAnimal, vueForm].forEach(v => v.classList.add('hidden'));
+        [navCal, navAnimaux].forEach(n => n.classList.remove('active'));
+        
+        showVue.classList.remove('hidden');
+        if (activeNav) activeNav.classList.add('active');
+        if (showVue === vueCal) calendar.render();
+      }
+
+      function getGardeStatus(startISO, endISO) {
+        const now = new Date();
+        const start = new Date(startISO);
+        const end = new Date(endISO);
+
+        const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+        const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+
+        if (nowDay >= startDay && nowDay <= endDay) {
+          return { label: "En cours", cssClass: "status-en-cours" };
+        } else if (nowDay < startDay) {
+          const diffTime = startDay - nowDay;
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          return { label: `Dans ${diffDays} j`, cssClass: "status-a-venir" };
+        } else {
+          return { label: "Terminé", cssClass: "status-termine" };
+        }
+      }
+
+      function formatDateDisplay(startISO, endISO) {
+        const s = new Date(startISO);
+        const e = new Date(endISO);
+        const pad = (n) => String(n).padStart(2, '0');
+        
+        const dStart = `${pad(s.getDate())}/${pad(s.getMonth()+1)}/${s.getFullYear()} ${pad(s.getHours())}:${pad(s.getMinutes())}`;
+        const dEnd = `${pad(e.getDate())}/${pad(e.getMonth()+1)}/${e.getFullYear()} ${pad(e.getHours())}:${pad(e.getMinutes())}`;
+        
+        return `${dStart}<br>${dEnd}`;
+      }
+
+      function formatDateFullLetters(startISO, endISO) {
+        const s = new Date(startISO);
+        const e = new Date(endISO);
+
+        const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+        
+        let startStr = s.toLocaleDateString('fr-FR', options);
+        let endStr = e.toLocaleDateString('fr-FR', options);
+
+        startStr = startStr.charAt(0).toUpperCase() + startStr.slice(1);
+        endStr = endStr.charAt(0).toUpperCase() + endStr.slice(1);
+
+        return `Du ${startStr}<br>au ${endStr}`;
+      }
+
+      function openGardeDetail(gardeId) {
+        const g = gardesListData.find(item => item.id === gardeId);
+        if(!g) return;
+        selectedGardeId = g.id;
+
+        const a = animauxData.find(item => item.id === g.animalId) || {};
+
+        document.getElementById('detail-garde-animal-img').src = g.img;
+        document.getElementById('detail-garde-animal-name').innerText = g.animalName;
+        document.getElementById('detail-garde-animal-owner').innerText = `de ${g.ownerName}`;
+        
+        document.getElementById('detail-garde-owner-fullname').innerText = a.owner || g.ownerName;
+        document.getElementById('detail-garde-owner-phone').innerText = a.phone ? a.phone : "Propriétaire";
+        document.getElementById('detail-garde-btn-call').href = a.phone ? `tel:${a.phone.replace(/\s+/g, '')}` : '#';
+        document.getElementById('detail-garde-btn-sms').href = a.phone ? `sms:${a.phone.replace(/\s+/g, '')}` : '#';
+
+        const badgeEl = document.getElementById('detail-garde-type-badge');
+        badgeEl.innerText = g.type;
+        badgeEl.className = `badge-type badge-${g.type}`;
+
+        document.getElementById('detail-garde-dates').innerHTML = formatDateFullLetters(g.startISO, g.endISO);
+        document.getElementById('detail-garde-notes').innerText = a.notes || "Aucune consigne saisie.";
+        
+        const montantText = g.montant ? `${g.montant} €` : "Non spécifié";
+        const paiementText = g.paiement ? ` (${g.paiement})` : "";
+        document.getElementById('detail-garde-tarif').innerText = `${montantText}${paiementText}`;
+
+        switchTab(navCal, vueDetailGarde);
+      }
+
+      const listContainer = document.getElementById('gardes-list-container');
+      function renderGardesList(filterType = "Toutes") {
+        listContainer.innerHTML = "";
+
+        const sortedGardes = [...gardesListData].sort((a, b) => new Date(a.startISO) - new Date(b.startISO));
+
+        sortedGardes
+          .filter(g => {
+            const status = getGardeStatus(g.startISO, g.endISO);
+            if (filterType === "Toutes") {
+              return status.label !== "Terminé";
+            } else if (filterType === "Terminées") {
+              return status.label === "Terminé";
+            } else {
+              return g.type === filterType;
+            }
+          })
+          .forEach(g => {
+            const status = getGardeStatus(g.startISO, g.endISO);
+            const card = document.createElement('div');
+            card.className = 'garde-card';
+            card.innerHTML = `
+              <div class="card-left">
+                <img src="${g.img}" class="card-avatar">
+                <div class="card-info">
+                  <h3>${g.animalName} <span>de ${g.ownerName}</span></h3>
+                  <span class="badge-type badge-${g.type}">${g.type}</span>
+                  <div class="card-date">${formatDateDisplay(g.startISO, g.endISO)}</div>
+                </div>
+              </div>
+              <div class="card-right">
+                <span class="status-tag ${status.cssClass}">${status.label}</span>
+                <span class="chevron">&gt;</span>
+              </div>
+            `;
+            card.addEventListener('click', () => openGardeDetail(g.id));
+            listContainer.appendChild(card);
+          });
+      }
+      renderGardesList();
+
+      // --- LOGIQUE SAUVEGARDE EXPORT / IMPORT ---
+      document.getElementById('btn-export').addEventListener('click', () => {
+        const dataToExport = {
+          animaux: animauxData,
+          gardes: gardesListData
+        };
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dataToExport, null, 2));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `gardes_backup_${new Date().toISOString().split('T')[0]}.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+      });
+
+      document.getElementById('btn-import-trigger').addEventListener('click', () => {
+        document.getElementById('file-import').click();
+      });
+
+      document.getElementById('file-import').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          try {
+            const importedData = JSON.parse(evt.target.result);
+            if (importedData.animaux && importedData.gardes) {
+              animauxData = importedData.animaux;
+              gardesListData = importedData.gardes;
+              localStorage.setItem('mesAnimaux', JSON.stringify(animauxData));
+              localStorage.setItem('mesGardesList', JSON.stringify(gardesListData));
+
+              calendar.removeAllEvents();
+              calendar.addEventSource(getCalendarEvents());
+              renderAnimaux();
+              renderGardesList();
+              alert("Données réimportées avec succès !");
+            } else {
+              alert("Format de fichier invalide.");
+            }
+          } catch(err) {
+            alert("Erreur lors de la lecture du fichier JSON.");
+          }
+        };
+        reader.readAsText(file);
+      });
+
+      document.getElementById('btn-edit-garde').addEventListener('click', () => {
+        const g = gardesListData.find(item => item.id === selectedGardeId);
+        if (!g) return;
+
+        editingGardeId = g.id;
+        document.getElementById('form-garde-title').innerText = "Modifier la garde";
+        
+        populateAnimalSelect();
+        if(g.animalId) {
+          document.getElementById('select-garde-animal').value = g.animalId;
+        }
+
+        currentType = g.type;
+        currentColor = g.color || '#e57373';
+        document.querySelectorAll('.type-btn').forEach(b => {
+          b.classList.remove('active');
+          if(b.getAttribute('data-type') === g.type) b.classList.add('active');
+        });
+
+        if(g.startISO && g.endISO) {
+          const [dDeb, tDeb] = g.startISO.split('T');
+          const [dFin, tFin] = g.endISO.split('T');
+          document.getElementById('date-debut').value = dDeb;
+          document.getElementById('heure-debut').value = tDeb.substring(0, 5);
+          document.getElementById('date-fin').value = dFin;
+          document.getElementById('heure-fin').value = tFin.substring(0, 5);
+        }
+
+        document.getElementById('montant').value = g.montant || "";
+        document.getElementById('paiement').value = g.paiement || "Espèce";
+
+        switchTab(null, vueForm);
+      });
+
+      document.getElementById('btn-cancel-garde').addEventListener('click', () => {
+        if (!selectedGardeId) return;
+        
+        gardesListData = gardesListData.filter(g => g.id !== selectedGardeId);
+        localStorage.setItem('mesGardesList', JSON.stringify(gardesListData));
+
+        const calEvent = calendar.getEventById(selectedGardeId.toString());
+        if (calEvent) calEvent.remove();
+
+        renderGardesList();
+        switchTab(navCal, vueCal);
+      });
+
+      document.getElementById('btn-back-detail-garde').addEventListener('click', () => switchTab(navCal, vueCal));
+
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          renderGardesList(btn.getAttribute('data-filter'));
+        });
+      });
+
+      function populateAnimalSelect() {
+        const select = document.getElementById('select-garde-animal');
+        select.innerHTML = "";
+        animauxData.forEach(a => {
+          const opt = document.createElement('option');
+          opt.value = a.id;
+          opt.innerText = `${a.name} (de ${a.owner})`;
+          select.appendChild(opt);
+        });
+      }
+
+      const gridContainer = document.getElementById('animaux-grid');
+      function renderAnimaux(filterText = "") {
+        gridContainer.innerHTML = "";
+        document.getElementById('animaux-counter').innerText = `${animauxData.length} animaux enregistrés`;
+        
+        animauxData
+          .filter(a => a.name.toLowerCase().includes(filterText.toLowerCase()) || a.owner.toLowerCase().includes(filterText.toLowerCase()))
+          .forEach(a => {
+            const card = document.createElement('div');
+            card.className = 'animal-item';
+            card.innerHTML = `
+              <img src="${a.img}" class="animal-avatar">
+              <span class="animal-name">${a.name}</span>
+              <span class="animal-owner">de ${a.owner}</span>
+              <span class="animal-breed">${a.breed}</span>
+            `;
+            card.addEventListener('click', () => {
+              editingAnimalId = a.id;
+              document.getElementById('detail-header-name').innerText = a.name;
+              document.getElementById('detail-header-owner').innerText = `de ${a.owner.split(' ')[0]}`;
+              document.getElementById('detail-name').innerText = a.name;
+              document.getElementById('detail-breed').innerText = a.breed;
+              document.getElementById('detail-owner-name').innerText = a.owner;
+              document.getElementById('detail-owner-phone').innerText = a.phone ? a.phone : "Propriétaire";
+              document.getElementById('detail-animal-btn-call').href = a.phone ? `tel:${a.phone.replace(/\s+/g, '')}` : '#';
+              document.getElementById('detail-animal-btn-sms').href = a.phone ? `sms:${a.phone.replace(/\s+/g, '')}` : '#';
+              document.getElementById('detail-notes').innerText = a.notes || "Aucune consigne saisie.";
+              document.getElementById('detail-img').src = a.img;
+              switchTab(navAnimaux, vueDetail);
+            });
+            gridContainer.appendChild(card);
+          });
+      }
+      renderAnimaux();
+
+      document.getElementById('search-input').addEventListener('input', (e) => renderAnimaux(e.target.value));
+
+      navCal.addEventListener('click', () => switchTab(navCal, vueCal));
+      navAnimaux.addEventListener('click', () => switchTab(navAnimaux, vueAnimaux));
+      document.getElementById('btn-back-animaux').addEventListener('click', () => switchTab(navAnimaux, vueAnimaux));
+
+      document.getElementById('btn-add-animal-header').addEventListener('click', () => {
+        editingAnimalId = null;
+        document.getElementById('form-animal-title').innerText = "Ajouter un animal";
+        document.getElementById('animal-input-name').value = "";
+        document.getElementById('animal-input-img').value = "";
+        document.getElementById('animal-input-breed').value = "";
+        document.getElementById('animal-input-owner').value = "";
+        document.getElementById('animal-input-phone').value = "";
+        document.getElementById('animal-input-notes').value = "";
+        switchTab(null, vueFormAnimal);
+      });
+
+      document.getElementById('btn-edit-animal').addEventListener('click', () => {
+        const a = animauxData.find(item => item.id === editingAnimalId);
+        if(!a) return;
+        document.getElementById('form-animal-title').innerText = "Modifier l'animal";
+        document.getElementById('animal-input-name').value = a.name;
+        document.getElementById('animal-input-img').value = a.img || "";
+        document.getElementById('animal-input-type').value = a.type || "chat";
+        document.getElementById('animal-input-breed').value = a.breed;
+        document.getElementById('animal-input-owner').value = a.owner;
+        document.getElementById('animal-input-phone').value = a.phone || "";
+        document.getElementById('animal-input-notes').value = a.notes;
+        switchTab(null, vueFormAnimal);
+      });
+
+      document.getElementById('btn-back-form-animal').addEventListener('click', () => {
+        switchTab(navAnimaux, editingAnimalId ? vueDetail : vueAnimaux);
+      });
+
+      document.getElementById('btn-save-animal').addEventListener('click', () => {
+        const name = document.getElementById('animal-input-name').value;
+        const owner = document.getElementById('animal-input-owner').value;
+        const phone = document.getElementById('animal-input-phone').value;
+        const inputImg = document.getElementById('animal-input-img').value;
+        if(!name || !owner) return alert("Saisissez au moins le nom et le propriétaire.");
+
+        const firstOwnerName = owner.split(' ')[0];
+        const type = document.getElementById('animal-input-type').value;
+
+        const defaultImg = type === 'chien' 
+          ? "https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=100" 
+          : "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=100";
+        const finalImg = inputImg.trim() ? inputImg.trim() : defaultImg;
+
+        if(editingAnimalId) {
+          const a = animauxData.find(item => item.id === editingAnimalId);
+          a.name = name;
+          a.img = finalImg;
+          a.type = type;
+          a.breed = document.getElementById('animal-input-breed').value;
+          a.owner = owner;
+          a.phone = phone;
+          a.notes = document.getElementById('animal-input-notes').value;
+
+          document.getElementById('detail-img').src = finalImg;
+
+          gardesListData.forEach(g => {
+            if (g.animalId === editingAnimalId) {
+              g.animalName = name;
+              g.ownerName = firstOwnerName;
+              g.img = finalImg;
+              const calEvent = calendar.getEventById(g.id.toString());
+              if (calEvent) calEvent.setProp('title', `${g.type} : ${name}`);
+            }
+          });
+          localStorage.setItem('mesGardesList', JSON.stringify(gardesListData));
+        } else {
+          const newAnimal = {
+            id: Date.now(), name: name, type: type,
+            breed: document.getElementById('animal-input-breed').value || "Non précisé",
+            owner: owner, phone: phone, notes: document.getElementById('animal-input-notes').value, img: finalImg
+          };
+          animauxData.push(newAnimal);
+        }
+
+        localStorage.setItem('mesAnimaux', JSON.stringify(animauxData));
+        renderAnimaux();
+        renderGardesList();
+        switchTab(navAnimaux, vueAnimaux);
+      });
+
+      document.querySelectorAll('.btn-trigger-add').forEach(btn => {
+        btn.addEventListener('click', () => {
+          editingGardeId = null;
+          document.getElementById('form-garde-title').innerText = "Nouvelle garde";
+          document.getElementById('montant').value = "";
+          populateAnimalSelect();
+          switchTab(null, vueForm);
+        });
+      });
+
+      document.getElementById('btn-back').addEventListener('click', () => {
+        switchTab(navCal, editingGardeId ? vueDetailGarde : vueCal);
+      });
+
+      let currentType = 'Garde', currentColor = '#e57373';
+      document.querySelectorAll('.type-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentType = btn.getAttribute('data-type');
+          currentColor = btn.getAttribute('data-color');
+        });
+      });
+
+      document.getElementById('btn-valider').addEventListener('click', () => {
+        const animalId = document.getElementById('select-garde-animal').value;
+        const selectedAnimal = animauxData.find(a => a.id == animalId);
+        const dDeb = document.getElementById('date-debut').value;
+        const hDeb = document.getElementById('heure-debut').value;
+        const dFin = document.getElementById('date-fin').value;
+        const hFin = document.getElementById('heure-fin').value;
+        
+        if(!dDeb || !dFin) return alert("Saisissez les dates.");
+        if(!selectedAnimal) return alert("Veuillez choisir un animal.");
+
+        const startISO = `${dDeb}T${hDeb}:00`;
+        const endISO = `${dFin}T${hFin}:00`;
+
+        if (editingGardeId) {
+          const g = gardesListData.find(item => item.id === editingGardeId);
+          g.animalId = selectedAnimal.id;
+          g.animalName = selectedAnimal.name;
+          g.ownerName = selectedAnimal.owner.split(' ')[0];
+          g.type = currentType;
+          g.startISO = startISO;
+          g.endISO = endISO;
+          g.color = currentColor;
+          g.montant = document.getElementById('montant').value;
+          g.paiement = document.getElementById('paiement').value;
+          g.img = selectedAnimal.img;
+
+          const calEvent = calendar.getEventById(editingGardeId.toString());
+          if (calEvent) {
+            calEvent.setProp('title', `${currentType} : ${selectedAnimal.name}`);
+            calEvent.setDates(startISO, endISO);
+            calEvent.setProp('backgroundColor', currentColor);
+          }
+        } else {
+          const newId = Date.now();
+          const eventObj = {
+            id: newId.toString(),
+            title: `${currentType} : ${selectedAnimal.name}`,
+            start: startISO,
+            end: endISO,
+            color: currentColor
+          };
+          calendar.addEvent(eventObj);
+
+          const newGardeCard = {
+            id: newId,
+            animalId: selectedAnimal.id,
+            animalName: selectedAnimal.name,
+            ownerName: selectedAnimal.owner.split(' ')[0],
+            type: currentType,
+            startISO: startISO,
+            endISO: endISO,
+            color: currentColor,
+            montant: document.getElementById('montant').value,
+            paiement: document.getElementById('paiement').value,
+            img: selectedAnimal.img
+          };
+          gardesListData.push(newGardeCard);
+        }
+
+        localStorage.setItem('mesGardesList', JSON.stringify(gardesListData));
+        renderGardesList();
+        switchTab(navCal, vueCal);
+      });
+    });
+  </script>
+</body>
+</html>
